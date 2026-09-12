@@ -1,0 +1,202 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trino-config
+  namespace: lakehouse
+  labels:
+    app.kubernetes.io/name: trino
+    app.kubernetes.io/part-of: lakehouse
+data:
+  node.properties: |
+    node.environment=lakehouse
+    node.data-dir=/data/trino
+
+  jvm.config: |
+    -server
+    -Xmx2G
+    -XX:+UseG1GC
+    -XX:G1PeriodicGCInterval=10000
+    -XX:+ExplicitGCInvokesConcurrent
+    -XX:+ExitOnOutOfMemoryError
+    -Djdk.attach.allowAttachSelf=true
+    -Dsun.reflect.inflationThreshold=0
+
+  config.properties: |
+    coordinator=true
+    node-scheduler.include-coordinator=true
+    http-server.http.port=8080
+    query.max-memory=2GB
+    query.max-memory-per-node=1GB
+    discovery.uri=http://localhost:8080
+
+  postgresql.properties: |
+    connector.name=postgresql
+    connection-url=jdbc:postgresql://postgres.lakehouse.svc.cluster.local:5432/operasyonel_db
+    connection-user=postgres
+    connection-password=postgrespassword
+
+  unity.properties: |
+    connector.name=iceberg
+    iceberg.catalog.type=rest
+    iceberg.rest-catalog.uri=http://unitycatalog.lakehouse.svc.cluster.local:8080/api/2.1/unity-catalog/iceberg
+    iceberg.rest-catalog.warehouse=unity
+    fs.native-s3.enabled=true
+    s3.endpoint=http://minio.lakehouse.svc.cluster.local:9000
+    s3.region=us-east-1
+    s3.path-style-access=true
+    s3.aws-access-key=minioadmin
+    s3.aws-secret-key=minioadmin
+    iceberg.file-format=PARQUET
+
+  access-control.properties: |
+    access-control.name=file
+    security.config-file=/etc/trino/rules.json
+    security.refresh-period=1s
+
+  rules.json: |
+    {
+      "catalogs": [
+        {
+          "user": ".*",
+          "catalog": ".*",
+          "allow": "all"
+        }
+      ],
+      "tables": [
+        {
+          "user": "admin.*",
+          "privileges": ["SELECT", "INSERT", "DELETE", "UPDATE", "OWNERSHIP"]
+        },
+        {
+          "user": "analyst.*",
+          "catalog": "postgresql",
+          "schema": "public",
+          "table": "salaries",
+          "privileges": ["SELECT"],
+          "filter": "department = 'Engineering'",
+          "columns": [
+            {
+              "name": "employee_name",
+              "mask": "CAST(concat(substr(employee_name, 1, 2), '****') AS varchar(100))"
+            },
+            {
+              "name": "base_salary",
+              "mask": "CAST(0.00 AS decimal(10, 2))"
+            }
+          ]
+        },
+        {
+          "user": "analyst.*",
+          "catalog": "unity",
+          "schema": "finance_schema",
+          "table": "bonuses",
+          "privileges": ["SELECT"],
+          "columns": [
+            {
+              "name": "annual_bonus",
+              "allow": false
+            }
+          ]
+        },
+        {
+          "user": ".*",
+          "privileges": ["SELECT"]
+        }
+      ]
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trino
+  namespace: lakehouse
+  labels:
+    app.kubernetes.io/name: trino
+    app.kubernetes.io/part-of: lakehouse
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trino
+  template:
+    metadata:
+      labels:
+        app: trino
+    spec:
+      containers:
+        - name: trino
+          image: trinodb/trino:444
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          startupProbe:
+            httpGet:
+              path: /v1/info
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /v1/info
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /v1/info
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1536Mi
+            limits:
+              cpu: 2000m
+              memory: 3072Mi
+          volumeMounts:
+            - name: trino-config-vol
+              mountPath: /etc/trino/node.properties
+              subPath: node.properties
+            - name: trino-config-vol
+              mountPath: /etc/trino/jvm.config
+              subPath: jvm.config
+            - name: trino-config-vol
+              mountPath: /etc/trino/config.properties
+              subPath: config.properties
+            - name: trino-config-vol
+              mountPath: /etc/trino/access-control.properties
+              subPath: access-control.properties
+            - name: trino-config-vol
+              mountPath: /etc/trino/rules.json
+              subPath: rules.json
+            - name: trino-config-vol
+              mountPath: /etc/trino/catalog/postgresql.properties
+              subPath: postgresql.properties
+            - name: trino-config-vol
+              mountPath: /etc/trino/catalog/unity.properties
+              subPath: unity.properties
+      volumes:
+        - name: trino-config-vol
+          configMap:
+            name: trino-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trino
+  namespace: lakehouse
+  labels:
+    app.kubernetes.io/name: trino
+    app.kubernetes.io/part-of: lakehouse
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+  selector:
+    app: trino
+

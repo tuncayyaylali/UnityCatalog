@@ -1,0 +1,113 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: unitycatalog-config
+  namespace: lakehouse
+  labels:
+    app.kubernetes.io/name: unitycatalog
+    app.kubernetes.io/part-of: lakehouse
+data:
+  server.properties: |
+    server.env=dev
+    server.authorization=disable
+    s3.bucketPath.0=s3://warehouse
+    s3.region.0=us-east-1
+    s3.accessKey.0=minioadmin
+    s3.secretKey.0=minioadmin
+    s3.sessionToken.0=dummy
+  hibernate.properties: |
+    hibernate.connection.driver_class=org.postgresql.Driver
+    hibernate.connection.url=jdbc:postgresql://postgres.lakehouse.svc.cluster.local:5432/unity_catalog
+    hibernate.connection.username=postgres
+    hibernate.connection.password=postgrespassword
+    hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+    hibernate.hbm2ddl.auto=update
+    hibernate.show_sql=false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unitycatalog
+  namespace: lakehouse
+  labels:
+    app.kubernetes.io/name: unitycatalog
+    app.kubernetes.io/part-of: lakehouse
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: unitycatalog
+  template:
+    metadata:
+      labels:
+        app: unitycatalog
+    spec:
+      containers:
+        - name: unitycatalog
+          image: unitycatalog/unitycatalog:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              value: "minioadmin"
+            - name: AWS_SECRET_ACCESS_KEY
+              value: "minioadmin"
+            - name: AWS_REGION
+              value: "us-east-1"
+            - name: AWS_ENDPOINT_URL
+              value: "http://minio.lakehouse.svc.cluster.local:9000"
+            - name: AWS_ENDPOINT_URL_S3
+              value: "http://minio.lakehouse.svc.cluster.local:9000"
+            - name: JAVA_TOOL_OPTIONS
+              value: "-Daws.endpointUrl=http://minio.lakehouse.svc.cluster.local:9000 -Daws.endpointUrl.s3=http://minio.lakehouse.svc.cluster.local:9000"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1536Mi
+          readinessProbe:
+            httpGet:
+              path: /api/2.1/unity-catalog/catalogs
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /api/2.1/unity-catalog/catalogs
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 3
+          volumeMounts:
+            - name: config-volume
+              mountPath: /home/unitycatalog/etc/conf/server.properties
+              subPath: server.properties
+            - name: config-volume
+              mountPath: /home/unitycatalog/etc/conf/hibernate.properties
+              subPath: hibernate.properties
+      volumes:
+        - name: config-volume
+          configMap:
+            name: unitycatalog-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: unitycatalog
+  namespace: lakehouse
+  labels:
+    app.kubernetes.io/name: unitycatalog
+    app.kubernetes.io/part-of: lakehouse
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+  selector:
+    app: unitycatalog

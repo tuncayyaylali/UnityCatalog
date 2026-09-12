@@ -1,0 +1,24 @@
+# Python Virtual Environment & Bytecode
+.venv/
+venv/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# SQLite Local Catalogs & Database Files
+*.db
+*.sqlite
+*.sqlite3
+catalog.db
+
+# OS & Editor generated files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Sensitive or Temporary Logs
+*.log
