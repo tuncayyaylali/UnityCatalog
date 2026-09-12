@@ -390,7 +390,45 @@ LIMIT 3;
 
 ---
 
-## 7. Sonuç
+## 7. Kurulumun Kaldırılması (Teardown & Temizlik)
+
+Demo ortamını ve oluşturulan tüm kaynakları yerel Kubernetes kümenizden tamamen kaldırmak için aşağıdaki adımları uygulayabilirsiniz:
+
+### Adım 1: Port Yönlendirmelerini Durdurma
+Terminallerinizde çalışan port yönlendirme işlemlerini (`kubectl port-forward`) `Ctrl + C` tuş kombinasyonu ile sonlandırın.
+
+### Adım 2: Kubernetes Kaynaklarını Silme
+
+Ortamdaki tüm pod, servis, configmap ve dağıtımları kaldırmak için aşağıdaki iki yöntemden birini kullanabilirsiniz:
+
+#### Yöntem A: Tek Komutla İsim Alanını Silme (Önerilen)
+`lakehouse` isim alanı silindiğinde, Kubernetes bu isim alanına bağlı tüm pod, servis, deployment, configmap ve geçici depolama alanlarını otomatik olarak temizler:
+
+```bash
+kubectl delete namespace lakehouse
+```
+
+Silme işleminin tamamlandığını doğrulamak için:
+```bash
+kubectl get namespace lakehouse
+```
+*(Beklenen Çıktı: `Error from server (NotFound): namespaces "lakehouse" not found`)*
+
+#### Yöntem B: Manifest Dosyaları Üzerinden Sırayla Kaldırma
+Kaynakları ters dağıtım sırasına göre tek tek kaldırmak isterseniz:
+
+```bash
+kubectl delete -f k8s/05-trino.yaml
+kubectl delete -f k8s/04-unitycatalog.yaml
+kubectl delete -f k8s/03-keycloak.yaml
+kubectl delete -f k8s/02-minio.yaml
+kubectl delete -f k8s/01-postgres.yaml
+kubectl delete -f k8s/00-namespace.yaml
+```
+
+---
+
+## 8. Sonuç
 
 Bu çalışma ile;
 1. **Sıfır Lisans ve Altyapı Maliyeti:** Tamamı açık kaynaklı bileşenlerle (Trino, Unity Catalog, MinIO, PostgreSQL, Keycloak) kurumsal ölçekte bir Modern Data Lakehouse ve Veri Federasyonu katmanı kurulmuştur.
