@@ -364,6 +364,13 @@ from trino.dbapi import connect
 import pandas as pd
 import matplotlib.pyplot as plt
 
+def run_query(sql, conn):
+    cur = conn.cursor()
+    cur.execute(sql.strip().rstrip(';'))
+    rows = cur.fetchall()
+    cols = [d[0] for d in cur.description]
+    return pd.DataFrame(rows, columns=cols)
+
 conn = connect(host="localhost", port=8080, user="admin", catalog="unity", schema="analytics_schema")
 
 query = """
@@ -382,10 +389,10 @@ WHERE
 GROUP BY 
     u.user_id, u.first_name, u.last_name
 ORDER BY 
-    total_clicks DESC;
+    total_clicks DESC
 """
 
-df_clicks = pd.read_sql(query, conn)
+df_clicks = run_query(query, conn)
 display(df_clicks)
 
 # Plotting with Matplotlib
