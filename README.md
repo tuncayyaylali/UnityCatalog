@@ -146,48 +146,21 @@ This section guides you through seeding relational operational data, verifying c
 
 ---
 
-### Phase A: Seed Operational Tables in PostgreSQL
+### Phase A: Operational Database & Tables in PostgreSQL
 
-Connect directly to the PostgreSQL pod to seed both the general `users` table and the sensitive `salaries` table in `operasyonel_db`:
+The PostgreSQL deployment (`k8s/01-postgres.yaml`) automatically provisions the **`operasyonel_db`** database along with both `public.users` and `public.salaries` tables on initial startup.
 
+> [!NOTE]
+> **Database Navigation:**
+> - When connecting to PostgreSQL via `psql -U postgres` without `-d`, PostgreSQL defaults to the system database `postgres` (`postgres=#`). To access operational tables, you must specify `-d operasyonel_db` or run `\c operasyonel_db`.
+> - In Trino, the `operasyonel_db` database is mounted under the catalog name **`postgresql`** (configured in `postgresql.properties`). Therefore, federated queries refer to `postgresql.public.users` and `postgresql.public.salaries`.
+
+To list databases and verify `operasyonel_db` exists:
 ```bash
-kubectl exec -i -n lakehouse deployment/postgres -- psql -U postgres -d operasyonel_db << 'EOF'
--- 1. General Operational Users Table
-DROP TABLE IF EXISTS public.users CASCADE;
-CREATE TABLE public.users (
-    user_id VARCHAR(50) PRIMARY KEY,
-    first_name VARCHAR(100) NOT NULL,
-    last_name VARCHAR(100) NOT NULL,
-    email VARCHAR(255) NOT NULL,
-    status VARCHAR(20) NOT NULL
-);
-
-INSERT INTO public.users VALUES
-('usr_001', 'Ahmet', 'Yilmaz', 'ahmet.yilmaz@lakehouse.local', 'ACTIVE'),
-('usr_002', 'Ayse', 'Demir', 'ayse.demir@lakehouse.local', 'ACTIVE'),
-('usr_003', 'Mehmet', 'Kaya', 'mehmet.kaya@lakehouse.local', 'ACTIVE'),
-('usr_004', 'Fatma', 'Celik', 'fatma.celik@lakehouse.local', 'INACTIVE'),
-('usr_005', 'Can', 'Ozturk', 'can.ozturk@lakehouse.local', 'ACTIVE');
-
--- 2. Sensitive Payroll Table
-DROP TABLE IF EXISTS public.salaries CASCADE;
-CREATE TABLE public.salaries (
-    emp_id VARCHAR(10) PRIMARY KEY,
-    employee_name VARCHAR(100) NOT NULL,
-    department VARCHAR(50) NOT NULL,
-    base_salary NUMERIC(10, 2) NOT NULL
-);
-
-INSERT INTO public.salaries VALUES
-('EMP001', 'Caner Yilmaz', 'Engineering', 95000.00),
-('EMP002', 'Elif Demir', 'Product', 88000.00),
-('EMP003', 'Murat Kaya', 'Data Science', 92000.00),
-('EMP004', 'Zeynep Celik', 'Security', 90000.00),
-('EMP005', 'Ahmet Ozturk', 'Operations', 75000.00);
-EOF
+kubectl exec -n lakehouse deployment/postgres -- psql -U postgres -c "\l"
 ```
 
-Verify seeded records:
+To verify the seeded operational records in `operasyonel_db`:
 ```bash
 kubectl exec -n lakehouse deployment/postgres -- psql -U postgres -d operasyonel_db -c "SELECT * FROM public.salaries;"
 ```
