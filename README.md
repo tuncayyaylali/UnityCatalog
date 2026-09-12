@@ -1,90 +1,88 @@
-# Modern Açık Kaynak Data Lakehouse & Veri Federasyonu
+# Modern Open Source Data Lakehouse & Data Federation
 
-Bu proje; **PostgreSQL**, **MinIO**, **Unity Catalog OSS**, **Trino** ve **Keycloak** bileşenlerinden oluşan, bulut bağımsız (cloud-agnostic), açık kaynaklı bir **Modern Data Lakehouse (Göl Evi)** ve **Veri Federasyonu** mimarisidir.
+This project delivers a vendor-agnostic, open-source **Modern Data Lakehouse** and **Data Federation** architecture powered by **PostgreSQL**, **MinIO**, **Unity Catalog OSS**, **Trino**, and **Keycloak**.
 
-İlişkisel operasyonel veritabanları ile S3 uyumlu nesne depolama üzerindeki analitik göl verilerini (Apache Iceberg / Parquet) herhangi bir ETL veri kopyalama sürecine ihtiyaç duymaksızın tek bir SQL sorgusunda birleştirmeyi ve bu mimari üzerinde **Rol Bazlı Erişim Denetimi (RBAC)**, **Satır Bazlı Güvenlik (RLS)** ve **Dinamik Kolon Maskeleme** mekanizmalarını uçtan uca uygulamayı sağlar.
-
----
-
-## 1. Tanım ve Kapsam
-
-Geleneksel veri mimarilerinde operasyonel sistemlerdeki (OLTP) veriler ile analitik sistemlerdeki (OLAP) büyük verileri birleştirmek için maliyetli, zaman alıcı ve kopyalama gerektiren ETL boru hatları kullanılır. Bu proje;
-- **Sıfır ETL Kopyalama:** Dağıtık SQL sorgu motoru aracılığıyla veriyi yerinde (in-place) ve bellek içinde birleştirmeyi,
-- **Açık Veri Standartları:** Apache Iceberg tablo formatı ve Unity Catalog açık metaveri standardı ile veri kilitlenmesini (vendor lock-in) önlemeyi,
-- **Merkezi Kimlik & Erişim:** Keycloak üzerinden OIDC/OAuth2 tabanlı kimlik yönetimini,
-- **Sıfır Güven (Zero-Trust) Veri Yönetişimi:** Tablo, satır ve sütun düzeyinde güvenlik kurallarını (Fine-Grained Access Control) Trino motoru üzerinde zorunlu kılmayı
-
-kapsar.
+It unifies operational relational databases (OLTP) and analytical object storage data (Apache Iceberg / Parquet) in a single distributed SQL query engine without requiring costly and complex ETL data duplication pipelines. Furthermore, it enforces end-to-end **Role-Based Access Control (RBAC)**, **Row-Level Security (RLS)**, and **Dynamic Column Masking** across federated datasets.
 
 ---
 
-## 2. Genel Mimari
+## 1. Definition and Scope
 
-Aşağıdaki şemada göl evi mimarisindeki bileşenlerin etkileşimi ve birleşik sorgu yaşam döngüsü gösterilmektedir:
+In legacy data architectures, integrating operational systems with analytical storage requires fragile, delayed, and expensive ETL pipelines. This platform provides:
+- **Zero ETL Duplication:** In-place and in-memory federated querying across transactional and analytical stores using a distributed SQL engine.
+- **Open Data Standards:** Prevention of vendor lock-in through the Apache Iceberg open table format and the Unity Catalog open metadata specification.
+- **Centralized Identity & Access Management:** Seamless authentication and role-based token delegation via Keycloak using OpenID Connect (OIDC) and OAuth 2.0.
+- **Zero-Trust Data Governance:** Enforcing fine-grained access control (table-level RBAC, row-level filtering, and column-level masking) natively within the query engine execution plan.
+
+---
+
+## 2. Overall Architecture
+
+The diagram below illustrates the service topology and the complete lifecycle of a federated SQL query:
 
 ```mermaid
 flowchart TD
-    User([Veri Analisti / Mühendisi])
+    User([Data Analyst / Engineer])
     Keycloak[Keycloak IAM & SSO\nRealm: lakehouse]
-    Trino[Trino Dağıtık Sorgu Motoru\nSürüm 444]
-    PG[(PostgreSQL 15\nOperasyonel DB & Metaveri)]
-    UC[Unity Catalog OSS\nREST Catalog Protokolü]
-    MinIO[(MinIO S3 Nesne Deposu\nIceberg & Parquet Veri Ambarı)]
+    Trino[Trino Distributed Query Engine\nVersion 444]
+    PG[(PostgreSQL 15\nOperational DB & Metastore)]
+    UC[Unity Catalog OSS\nREST Catalog Protocol]
+    MinIO[(MinIO S3 Object Storage\nIceberg & Parquet Lakehouse)]
 
-    User -->|1. Kimlik Doğrulama / Rol Alma| Keycloak
-    User -->|2. Federasyon SQL Sorgusu Gönderimi| Trino
-    Trino -->|3. SAC Güvenlik & Yetki Kontrolü| Trino
-    Trino -->|4. Operasyonel Veri Filtreleme| PG
-    Trino -->|5. Tablo & Dosya Konum Çözümleme| UC
-    UC -->|6. Metaveri Sorgulama| PG
-    Trino -->|7. Dağıtık S3 Parquet/Iceberg Okuma| MinIO
-    Trino -->|8. Bellek İçi Birleştirme & Sonuç| User
+    User -->|1. Authenticate & Obtain Roles| Keycloak
+    User -->|2. Submit Federated SQL Query| Trino
+    Trino -->|3. Evaluate SAC Security Policies| Trino
+    Trino -->|4. Pushdown Operational Filters| PG
+    Trino -->|5. Resolve Schema & Metadata| UC
+    UC -->|6. Query Metastore State| PG
+    Trino -->|7. Distributed Scan Parquet/Iceberg| MinIO
+    Trino -->|8. In-Memory Join & Return Results| User
 ```
 
-### Katmanlar ve Görevleri:
-1. **Kimlik ve Erişim Katmanı (Keycloak):** Kullanıcı kimlik doğrulamasını, rollerini (`admin`, `data-engineer`, `data-analyst`) ve SSO oturumlarını yönetir.
-2. **Dağıtık Sorgu ve Güvenlik Motoru (Trino):** Kullanıcının rolüne göre sistem erişim denetim kurallarını (`rules.json`) işletir, sorguları ayrıştırır ve optimize eder; ilişkisel veritabanı ile nesne deposu arasında bellek içi federasyon sağlar.
-3. **Katalog ve Metaveri Katmanı (Unity Catalog OSS):** Analitik tabloların şema, versiyon ve fiziksel dosya konumlarını Iceberg REST Catalog standardıyla Trino'ya sunar. Metaverisini PostgreSQL üzerinde depolar.
-4. **Operasyonel İlişkisel Veri Katmanı (PostgreSQL):** Canlı operasyonel tabloları (`users`, `salaries`) ve Unity Catalog ile Keycloak'ın dahili durumlarını saklar.
-5. **Analitik Nesne Depolama Katmanı (MinIO):** S3 API uyumlu yerel depolama katmanıdır; analitik tıklama akışı (`clickstream`) ve prim (`bonuses`) veri setlerini Apache Iceberg / Parquet formatında depolar.
+### Layer Roles & Responsibilities:
+1. **Identity & Access Management (Keycloak):** Manages user authentication, group memberships, and platform roles (`admin`, `data-engineer`, `data-analyst`).
+2. **Distributed Query & Security Engine (Trino):** Enforces System Access Control policies (`rules.json`), analyzes and optimizes query execution plans, and executes high-performance in-memory joins across diverse data sources.
+3. **Catalog & Governance Metastore (Unity Catalog OSS):** Implements the open Iceberg REST Catalog protocol to serve table schemas, snapshots, and storage locations to Trino while storing metadata in PostgreSQL.
+4. **Operational Relational Store (PostgreSQL):** Stores live transactional business tables (`users`, `salaries`) as well as internal state databases for Unity Catalog and Keycloak.
+5. **Analytical Object Storage (MinIO):** High-performance, S3-compatible local object store hosting Apache Iceberg Parquet files for analytical datasets such as `clickstream` and `bonuses`.
 
 ---
 
-## 3. Kullanılan Araç ve Yöntemler
+## 3. Tools and Methods Used
 
-- **Kubernetes (K8s):** Tüm göl evi servislerinin yerel kümede (`lakehouse` namespace) yalıtılmış ve ölçeklenebilir şekilde koşturulması.
-- **Trino Distributed SQL Engine (v444):** Bellek içi (in-memory) dağıtık sorgulama, ilişkisel itme (pushdown optimization) ve çapraz katalog federasyonu.
-- **Unity Catalog OSS (v0.6.0):** Çoklu motor desteğine sahip açık kaynaklı veri ve yapay zeka yönetişim platformu (Iceberg REST Catalog uyumlu).
-- **MinIO Object Storage:** Yüksek performanslı, S3 uyumlu nesne deposu; açık Parquet ve Avro dosyalarının saklanması.
-- **Apache Iceberg:** Büyük veri kümelerinde ACID işlemleri, zaman yolculuğu (time-travel) ve şema evrimi sağlayan açık tablo formatı.
-- **PostgreSQL 15:** ACID uyumlu ilişkisel veri tabanı motoru.
-- **Keycloak (v24.0.5):** OAuth 2.0 ve OpenID Connect (OIDC) tabanlı merkezi kimlik sağlayıcı.
-- **Trino File-Based System Access Control (SAC):** Rol, tablo, satır (`filter`) ve kolon (`mask` / `allow: false`) düzeyinde dinamik yetkilendirme.
+- **Kubernetes (K8s):** Container orchestration providing network isolation and scalability across the `lakehouse` namespace.
+- **Trino Distributed SQL Engine (v444):** Massively parallel processing (MPP) query engine executing relational pushdowns and cross-catalog federated joins in memory.
+- **Unity Catalog OSS (v0.6.0):** Multi-engine data and AI governance platform implementing the open Iceberg REST Catalog specification.
+- **MinIO Object Storage:** High-throughput, S3 API-compliant object storage hosting columnar Parquet and metadata files.
+- **Apache Iceberg:** High-performance open table format for huge analytic datasets offering ACID transactions, partition evolution, and time-travel.
+- **PostgreSQL 15:** ACID-compliant relational operational database.
+- **Keycloak (v24.0.5):** Identity and access management provider supporting OIDC, OAuth 2.0, and centralized token claims.
+- **Trino File-Based System Access Control (SAC):** Policy-based security mechanism enforcing table permissions, row-level filters (`filter`), and column masks (`mask` / `allow: false`).
 
 ---
 
-## 4. Dosyaların Kısa Açıklamaları
+## 4. Short File Descriptions
 
-Proje kök dizininde yer alan altyapı ve konfigürasyon dosyaları aşağıda özetlenmiştir:
+All infrastructure definitions are structured as declarative Kubernetes manifests:
 
-| Dosya / Dizin | Görevi ve İçeriği |
+| File / Directory | Description |
 |---|---|
-| `k8s/00-namespace.yaml` | Tüm bileşenlerin konuşlandığı `lakehouse` ortam izolasyonunu sağlayan Kubernetes isim alanı. |
-| `k8s/01-postgres.yaml` | Operasyonel veritabanı (`operasyonel_db`), Unity Catalog metaveri tabanı (`unity_catalog`) ve Keycloak için PostgreSQL Deployment ve Service tanımları. |
-| `k8s/02-minio.yaml` | MinIO S3 nesne depolama sunucusu ve `warehouse`, `bronze`, `silver`, `gold` bucket'larını otomatik oluşturan başlatma işi (Job). |
-| `k8s/03-keycloak.yaml` | Keycloak IAM dağıtımı, `lakehouse` realm konfigürasyonu, OIDC istemcileri ve kullanıcı rolleri. |
-| `k8s/04-unitycatalog.yaml` | PostgreSQL metastore bağlantılı Unity Catalog OSS deployment'ı, S3 entegrasyonu ve REST API servisleri. |
-| `k8s/05-trino.yaml` | Trino Coordinator pod'u, PostgreSQL kataloğu, Unity Catalog (Iceberg REST) kataloğu ve `rules.json` erişim denetim yapılandırması. |
-| `AGENTS.md` | Göl evi mimarisi, veri akış yaşam döngüsü ve federasyon prensiplerini içeren kılavuz. |
+| `k8s/00-namespace.yaml` | Defines the isolated `lakehouse` namespace for the entire deployment. |
+| `k8s/01-postgres.yaml` | Deploys PostgreSQL 15, initializing `operasyonel_db`, `unity_catalog`, and `keycloak` databases along with persistent storage. |
+| `k8s/02-minio.yaml` | Deploys MinIO object storage with an initialization Job that automatically provisions storage buckets (`warehouse`, `bronze`, `silver`, `gold`). |
+| `k8s/03-keycloak.yaml` | Deploys Keycloak 24 configured with the `lakehouse` realm, client credentials, and user roles. |
+| `k8s/04-unitycatalog.yaml` | Deploys Unity Catalog OSS connected to the PostgreSQL metastore and MinIO S3 backend. |
+| `k8s/05-trino.yaml` | Deploys the Trino Coordinator, mounting PostgreSQL and Unity Catalog connectors as well as fine-grained SAC rules (`rules.json`). |
+| `.gitignore` | Prevents virtual environments, local SQLite databases, and temporary artifacts from polluting the repository. |
 
 ---
 
-## 5. Kurulum Aşamaları
+## 5. Deployment Steps
 
-Aşağıdaki adımları Kubernetes CLI (`kubectl`) kullanarak sırasıyla uygulayınız.
+Follow these steps using the Kubernetes CLI (`kubectl`) to bring up the environment.
 
-### Adım 1: Kubernetes Manifestlerini Uygulama
-Tüm manifestleri kümenize dağıtın:
+### Step 1: Apply Kubernetes Manifests
+Deploy all services into your cluster:
 
 ```bash
 kubectl apply -f k8s/00-namespace.yaml
@@ -95,14 +93,14 @@ kubectl apply -f k8s/04-unitycatalog.yaml
 kubectl apply -f k8s/05-trino.yaml
 ```
 
-### Adım 2: Pod Durumlarını Kontrol Etme
-Tüm pod'ların `Running` ve hazır (`1/1`) duruma gelmesini bekleyin:
+### Step 2: Verify Pod Health and Readiness
+Ensure all pods are in `Running` status and ready (`1/1`):
 
 ```bash
 kubectl get pods -n lakehouse
 ```
 
-Beklenen çıktı:
+Expected output:
 ```text
 NAME                            READY   STATUS      RESTARTS   AGE
 keycloak-679665bc87-4n9h8       1/1     Running     0          10m
@@ -113,48 +111,48 @@ trino-fb8f46866-bffq5           1/1     Running     0          5m
 unitycatalog-68d998d567-2nmmt   1/1     Running     0          10m
 ```
 
-### Adım 3: Yerel Port Yönlendirmeleri (Port-Forward)
-Yerel tarayıcınızdan ve geliştirme ortamınızdan arayüzlere erişmek için ayrı terminal pencerelerinde aşağıdaki port yönlendirmelerini başlatın:
+### Step 3: Establish Local Port-Forwarding
+Forward service ports to your local workstation using separate terminal windows:
 
 ```bash
-# Trino Web Arayüzü
+# Trino Web UI & SQL Gateway
 kubectl port-forward svc/trino 8080:8080 -n lakehouse
 
-# MinIO Konsolu & S3 API
+# MinIO Console & S3 API
 kubectl port-forward svc/minio 9001:9001 -n lakehouse
 kubectl port-forward svc/minio 9000:9000 -n lakehouse
 
-# Keycloak Yönetici Konsolu
+# Keycloak Administration Console
 kubectl port-forward svc/keycloak 8081:8080 -n lakehouse
 
-# Unity Catalog REST API & Swagger UI
+# Unity Catalog REST API & Interactive Swagger UI
 kubectl port-forward svc/unitycatalog 8083:8080 -n lakehouse
 ```
 
-### Adım 4: Web Arayüzlerine Erişim Bilgileri
+### Step 4: Web UI Access Credentials
 
-| Servis | Adres | Kullanıcı Adı | Şifre |
+| Service | Local Endpoint | Username | Password |
 |---|---|---|---|
-| **Trino Web UI** | `http://localhost:8080` | `admin` | *(Şifre boş)* |
+| **Trino Web UI** | `http://localhost:8080` | `admin` | *(Leave blank)* |
 | **MinIO Console** | `http://localhost:9001` | `minioadmin` | `minioadmin` |
-| **Keycloak Admin** | `http://localhost:8081` | `admin` | `admin` *(veya `adminpassword`)* |
-| **Unity Catalog API Docs** | `http://localhost:8083/docs/` | *(Gerekmez)* | *(Açık Swagger UI)* |
+| **Keycloak Admin** | `http://localhost:8081` | `admin` | `admin` *(or `adminpassword`)* |
+| **Unity Catalog API Docs** | `http://localhost:8083/docs/` | *(None required)* | *(Public Swagger UI)* |
 
 ---
 
-## 6. Demo ve Test
+## 6. Demo and Verification
 
-Bu bölümde; operasyonel ve analitik tabloların oluşturulması, temel çapraz federasyon sorgusu, güvenlik kurallarının devreye alınması ve `admin` ile `analyst` rolleri arasındaki yetki farklarının doğrulanması adımları yer almaktadır.
+This section guides you through seeding relational operational data, verifying catalog connectivity, executing cross-catalog federation queries, and verifying fine-grained RBAC, RLS, and column masking directly from the command line.
 
 ---
 
-### Aşama A: Operasyonel Tabloları PostgreSQL'de Oluşturma
+### Phase A: Seed Operational Tables in PostgreSQL
 
-PostgreSQL pod'una doğrudan bağlanarak ilişkisel `users` ve `salaries` tablolarını oluşturup verilerini ekleyin:
+Connect directly to the PostgreSQL pod to seed both the general `users` table and the sensitive `salaries` table in `operasyonel_db`:
 
 ```bash
 kubectl exec -i -n lakehouse deployment/postgres -- psql -U postgres -d operasyonel_db << 'EOF'
--- 1. Kullanıcılar Tablosu
+-- 1. General Operational Users Table
 DROP TABLE IF EXISTS public.users CASCADE;
 CREATE TABLE public.users (
     user_id VARCHAR(50) PRIMARY KEY,
@@ -171,7 +169,7 @@ INSERT INTO public.users VALUES
 ('usr_004', 'Fatma', 'Celik', 'fatma.celik@lakehouse.local', 'INACTIVE'),
 ('usr_005', 'Can', 'Ozturk', 'can.ozturk@lakehouse.local', 'ACTIVE');
 
--- 2. Hassas Maaş Tablosu
+-- 2. Sensitive Payroll Table
 DROP TABLE IF EXISTS public.salaries CASCADE;
 CREATE TABLE public.salaries (
     emp_id VARCHAR(10) PRIMARY KEY,
@@ -189,22 +187,22 @@ INSERT INTO public.salaries VALUES
 EOF
 ```
 
-Verilerin eklendiğini doğrulayın:
+Verify seeded records:
 ```bash
 kubectl exec -n lakehouse deployment/postgres -- psql -U postgres -d operasyonel_db -c "SELECT * FROM public.salaries;"
 ```
 
 ---
 
-### Aşama B: Trino Kataloglarının Hazır Olduğunu Doğrulama
+### Phase B: Verify Trino Catalogs
 
-Trino Coordinator üzerinden katalogları listeleyin:
+List active catalogs recognized by the Trino coordinator:
 
 ```bash
 kubectl exec -n lakehouse deployment/trino -- trino --execute "SHOW CATALOGS;"
 ```
 
-Beklenen çıktı:
+Expected output:
 ```text
 "jmx"
 "memory"
@@ -217,9 +215,9 @@ Beklenen çıktı:
 
 ---
 
-### Aşama C: Temel Çapraz Federasyon Sorgusu (AGENTS.md)
+### Phase C: Basic Cross-Catalog Federation Query
 
-PostgreSQL'deki canlı kullanıcılar (`postgresql.public.users`) ile MinIO nesne deposunda Unity Catalog üzerinden çözümlenen tıklama akışı verilerini (`unity.analytics_schema.clickstream`) bellek içinde birleştiren federasyon sorgusunu çalıştırın:
+Execute a federated query joining transactional data (`postgresql.public.users`) with analytical event data resolved by Unity Catalog on MinIO object storage (`unity.analytics_schema.clickstream`):
 
 ```bash
 kubectl exec -n lakehouse deployment/trino -- trino --execute "
@@ -245,40 +243,40 @@ LIMIT 10;
 "
 ```
 
-#### Beklenen Çıktı:
+#### Expected Output:
 ```text
 "usr_001","Ahmet","Yilmaz","4","2026-09-12 10:25:00.000000 UTC"
 "usr_005","Can","Ozturk","2","2026-09-12 14:15:30.000000 UTC"
 "usr_002","Ayse","Demir","2","2026-09-12 11:05:40.000000 UTC"
 "usr_003","Mehmet","Kaya","1","2026-09-12 12:30:15.000000 UTC"
 ```
-*(Not: `INACTIVE` statüsündeki Fatma Çelik sorgu motoru tarafından ilişkisel filtreleme itmesiyle otomatik elenmiştir.)*
+*(Notice: The inactive user `Fatma Celik` is automatically filtered out via relational pushdown before the in-memory join).*
 
 ---
 
-### Aşama D: Rol Bazlı Erişim Denetimi (RBAC), RLS ve Maskeleme Kuralları
+### Phase D: Governance Configuration (RBAC, RLS & Column Masking)
 
-Trino pod'una yerleştirilen `/etc/trino/rules.json` güvenlik politikası aşağıdaki kuralları uygular:
+The security rules mounted inside Trino at `/etc/trino/rules.json` enforce the following policies:
 
-1. **`admin.*` Kullanıcısı:** Tüm katalog, şema ve tablolarda tam yetki (`SELECT`, `INSERT`, `DELETE`, `UPDATE`, `OWNERSHIP`).
-2. **`analyst.*` Kullanıcısı:**
-   - `postgresql.public.salaries`:
-     - **Satır Filtreleme (RLS):** `"filter": "department = 'Engineering'"` (Yalnızca Mühendislik çalışanlarını görür).
-     - **Kolon Maskeleme:** 
-       - `employee_name`: `"mask": "CAST(concat(substr(employee_name, 1, 2), '****') AS varchar(100))"` (İsimlerin ilk 2 harfi hariç kalanı yıldızlanır).
-       - `base_salary`: `"mask": "CAST(0.00 AS decimal(10, 2))"` (Maaş değeri 0.00 olarak maskelenir).
-   - `unity.finance_schema.bonuses`:
-     - **Kolon Kısıtlama:** `annual_bonus` kolonu için `"allow": false` (Bu kolona erişim engellenir).
-3. **Diğer Tablolar:** Genel analitik tablolar (`users`, `clickstream`) için tüm kullanıcılara `SELECT` izni tanımlıdır.
+1. **`admin.*` User:** Full administrative privileges across all catalogs and tables (`SELECT`, `INSERT`, `DELETE`, `UPDATE`, `OWNERSHIP`).
+2. **`analyst.*` User:**
+   - On `postgresql.public.salaries`:
+     - **Row-Level Security (RLS):** `"filter": "department = 'Engineering'"` (The analyst can only see employees in Engineering).
+     - **Column Masking:**
+       - `employee_name`: `"mask": "CAST(concat(substr(employee_name, 1, 2), '****') AS varchar(100))"` (Only the first two characters remain visible).
+       - `base_salary`: `"mask": "CAST(0.00 AS decimal(10, 2))"` (The base salary is masked to 0.00).
+   - On `unity.finance_schema.bonuses`:
+     - **Column Restriction:** `annual_bonus` column has `"allow": false` (Direct access to this column is denied).
+3. **General Fallback (`.*`):** Non-sensitive analytics tables (`users`, `clickstream`) remain accessible with `SELECT` permission for all authenticated identities.
 
 ---
 
-### Aşama E: Güvenlik Testleri (Admin vs Analyst)
+### Phase E: Live Security Verification (Admin vs Analyst)
 
-Aşağıdaki CLI komutlarını sırayla çalıştırarak güvenlik mekanizmasını doğrulayın:
+Execute the following verification queries to observe how Trino enforces security policies:
 
-#### Test 1: Admin Rolü ile Çapraz Bordro Sorgusu (Tam Yetki)
-Admin kullanıcısı ilişkisel maaş tablosu (`salaries`) ile MinIO prim tablosunu (`bonuses`) birleştirir ve toplam bordroyu hesaplar:
+#### Test 1: Admin Role Running the Sensitive Payroll Query (Full Access)
+The admin joins relational salaries (`salaries`) with object storage bonuses (`bonuses`) to calculate total compensation:
 
 ```bash
 kubectl exec -n lakehouse deployment/trino -- trino --user admin --execute "
@@ -299,7 +297,7 @@ ORDER BY
 "
 ```
 
-**Admin Sonucu (Başarılı - 5 çalışan eksiksiz):**
+**Admin Result (Success - All 5 employees visible unmasked):**
 ```text
 "EMP001","Caner Yilmaz","Engineering","95000.00","18500.0","113500.0","4.8"
 "EMP003","Murat Kaya","Data Science","92000.00","16000.0","108000.0","4.7"
@@ -310,8 +308,8 @@ ORDER BY
 
 ---
 
-#### Test 2: Analyst Rolü ile Satır Filtreleme (RLS) ve Maskeleme Testi
-Analyst kullanıcısı aynı `salaries` tablosunu sorgular:
+#### Test 2: Analyst Role Enforcing RLS & Column Masking
+The analyst runs the exact same query against `salaries`:
 
 ```bash
 kubectl exec -n lakehouse deployment/trino -- trino --user analyst --execute "
@@ -321,18 +319,18 @@ ORDER BY emp_id;
 "
 ```
 
-**Analyst Sonucu (RLS & Kolon Maskeleme Devrede):**
+**Analyst Result (RLS & Masking Automatically Applied):**
 ```text
 "EMP001","Ca****","Engineering","0.00"
 ```
-- **RLS Kanıtı:** 5 satır yerine sadece `department = 'Engineering'` koşulunu sağlayan 1 satır geldi.
-- **İsim Maskeleme Kanıtı:** `Caner Yilmaz` yerine `Ca****` döndü.
-- **Maaş Maskeleme Kanıtı:** `95000.00` yerine `0.00` döndü.
+- **RLS Verification:** Only the `Engineering` record is returned (the other 4 departments are completely filtered out).
+- **Name Masking Verification:** `Caner Yilmaz` is masked as `Ca****`.
+- **Salary Masking Verification:** `95000.00` is replaced with `0.00`.
 
 ---
 
-#### Test 3: Analyst Rolü ile İzin Verilen Kolonları Sorgulama (MinIO / Iceberg)
-Analyst kullanıcısı `bonuses` tablosundaki izinli sütunları (`performance_score`, `fiscal_year`) sorgular:
+#### Test 3: Analyst Role Reading Permitted Columns (MinIO / Iceberg)
+The analyst queries allowed non-sensitive columns (`performance_score`, `fiscal_year`) on `bonuses`:
 
 ```bash
 kubectl exec -n lakehouse deployment/trino -- trino --user analyst --execute "
@@ -343,7 +341,7 @@ LIMIT 3;
 "
 ```
 
-**Sonuç (Başarılı):**
+**Result (Success):**
 ```text
 "EMP001","4.8","2026"
 "EMP002","4.5","2026"
@@ -352,8 +350,8 @@ LIMIT 3;
 
 ---
 
-#### Test 4: Analyst Rolü ile Yasaklı Kolona Erişim Girişimi (`allow: false`)
-Analyst kullanıcısı erişimi kısıtlanan `annual_bonus` kolonunu okumaya çalışır:
+#### Test 4: Analyst Role Accessing Forbidden Column (`allow: false`)
+The analyst attempts to query the restricted `annual_bonus` column:
 
 ```bash
 kubectl exec -n lakehouse deployment/trino -- trino --user analyst --execute "
@@ -362,15 +360,15 @@ FROM unity.finance_schema.bonuses;
 "
 ```
 
-**Sonuç (Trino Tarafından Engellendi):**
+**Result (Blocked by Security Policy):**
 ```text
 Query failed: Access Denied: Cannot select from table unity.finance_schema.bonuses
 ```
 
 ---
 
-#### Test 5: Analyst Rolü ile Genel Analitik Tablolarına Erişim
-Analyst'in sistemden tamamen engellenmediğini, yetkili olduğu genel tablolara erişebildiğini doğrulayın:
+#### Test 5: Analyst Role Querying General Analytics Tables
+Verify that the analyst is not locked out of authorized non-sensitive tables:
 
 ```bash
 kubectl exec -n lakehouse deployment/trino -- trino --user analyst --execute "
@@ -381,7 +379,7 @@ LIMIT 3;
 "
 ```
 
-**Sonuç (Başarılı):**
+**Result (Success):**
 ```text
 "usr_001","Ahmet","ACTIVE","purchase"
 "usr_001","Ahmet","ACTIVE","click"
@@ -390,32 +388,32 @@ LIMIT 3;
 
 ---
 
-## 7. Kurulumun Kaldırılması (Teardown & Temizlik)
+## 7. Teardown and Cleanup
 
-Demo ortamını ve oluşturulan tüm kaynakları yerel Kubernetes kümenizden tamamen kaldırmak için aşağıdaki adımları uygulayabilirsiniz:
+To completely remove the Lakehouse environment and reclaim all local resources, follow either of the methods below:
 
-### Adım 1: Port Yönlendirmelerini Durdurma
-Terminallerinizde çalışan port yönlendirme işlemlerini (`kubectl port-forward`) `Ctrl + C` tuş kombinasyonu ile sonlandırın.
+### Step 1: Stop Port-Forwarding Processes
+Terminate any background `kubectl port-forward` commands in your open terminal windows using `Ctrl + C`.
 
-### Adım 2: Kubernetes Kaynaklarını Silme
+### Step 2: Delete Kubernetes Resources
 
-Ortamdaki tüm pod, servis, configmap ve dağıtımları kaldırmak için aşağıdaki iki yöntemden birini kullanabilirsiniz:
+Choose one of the following two methods:
 
-#### Yöntem A: Tek Komutla İsim Alanını Silme (Önerilen)
-`lakehouse` isim alanı silindiğinde, Kubernetes bu isim alanına bağlı tüm pod, servis, deployment, configmap ve geçici depolama alanlarını otomatik olarak temizler:
+#### Method A: Delete the Entire Namespace (Recommended)
+Deleting the `lakehouse` namespace automatically purges all associated deployments, pods, services, jobs, and configmaps:
 
 ```bash
 kubectl delete namespace lakehouse
 ```
 
-Silme işleminin tamamlandığını doğrulamak için:
+Verify that the namespace has been deleted:
 ```bash
 kubectl get namespace lakehouse
 ```
-*(Beklenen Çıktı: `Error from server (NotFound): namespaces "lakehouse" not found`)*
+*(Expected output: `Error from server (NotFound): namespaces "lakehouse" not found`)*
 
-#### Yöntem B: Manifest Dosyaları Üzerinden Sırayla Kaldırma
-Kaynakları ters dağıtım sırasına göre tek tek kaldırmak isterseniz:
+#### Method B: Delete Resources Sequentially via Manifests
+To delete resources in reverse dependency order:
 
 ```bash
 kubectl delete -f k8s/05-trino.yaml
@@ -428,16 +426,15 @@ kubectl delete -f k8s/00-namespace.yaml
 
 ---
 
-## 8. Sonuç
+## 8. Conclusion
 
-Bu çalışma ile;
-1. **Sıfır Lisans ve Altyapı Maliyeti:** Tamamı açık kaynaklı bileşenlerle (Trino, Unity Catalog, MinIO, PostgreSQL, Keycloak) kurumsal ölçekte bir Modern Data Lakehouse ve Veri Federasyonu katmanı kurulmuştur.
-2. **Çapraz Veri Federasyonu:** İlişkisel veritabanı (PostgreSQL) ile nesne deposundaki (MinIO Iceberg Parquet) veriler, herhangi bir ETL kopyalama işlemine gerek kalmadan doğrudan Trino üzerinde milisaniyeler seviyesinde birleştirilmiştir.
-3. **Uçtan Uca Veri Yönetişimi (Data Governance):** 
-   - Tablo düzeyinde erişim denetimi (RBAC),
-   - Satır düzeyinde yalıtım (RLS - kullanıcının sadece kendi departmanını görmesi),
-   - Kolon düzeyinde dinamik veri maskeleme (`Ca****`, `0.00`),
-   - Hassas kolonların tamamen kilitlenmesi (`allow: false`)
+This architecture demonstrates:
+1. **Zero Licensing Costs:** Built entirely on open-source technologies (Trino, Unity Catalog, MinIO, PostgreSQL, Keycloak) to provide enterprise-grade data lakehouse capabilities.
+2. **Cross-Catalog Data Federation:** Unifying transactional OLTP data (PostgreSQL) with scalable analytical lakehouse tables (MinIO Iceberg Parquet) in memory with zero ETL duplication.
+3. **End-to-End Zero-Trust Data Governance:**
+   - Table-level access control (RBAC),
+   - Row-level filtering (RLS - restricting visibility to department-specific rows),
+   - Dynamic column data masking (`Ca****`, `0.00`),
+   - Column-level access restrictions (`allow: false`)
    
-kuralları Trino motoru üzerinde canlı olarak kanıtlanmıştır. Bu mimari, şirketlerin veri gizliliği (KVKK/GDPR) standartlarına uyumlu bir göl evi altyapısı kurmaları için eksiksiz bir referans model sunmaktadır.
-
+verified in production-like scenarios on Kubernetes, providing a complete blueprint for enterprise data compliance (GDPR/KVKK) and federated analytics.
