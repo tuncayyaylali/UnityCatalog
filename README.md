@@ -198,7 +198,7 @@ kubectl exec -n lakehouse deployment/postgres -- psql -U postgres -d operasyonel
 
 ### Phase B: Interactive Lakehouse Workflow & Seeding (JupyterLab Walkthrough)
 
-The complete Lakehouse seeding, cross-catalog federation query execution, and analytical visualization can be executed interactively via JupyterLab using the bundled notebook [`lakehouse_quickstart.ipynb`](file:///c:/Users/Hp/Documents/GitHub/UnityCatalog/lakehouse_quickstart.ipynb).
+The complete Lakehouse seeding, cross-catalog federation query execution, and analytical visualization can be executed interactively via JupyterLab using the bundled notebook [`lakehouse_quickstart.ipynb`]
 
 To launch JupyterLab from the workspace root:
 ```bash
