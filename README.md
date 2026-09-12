@@ -196,7 +196,7 @@ kubectl exec -n lakehouse deployment/postgres -- psql -U postgres -d operasyonel
 
 ---
 
-### Interactive Lakehouse Workflow & Seeding (JupyterLab Walkthrough)
+### Phase B: Interactive Lakehouse Workflow & Seeding (JupyterLab Walkthrough)
 
 The complete Lakehouse seeding, cross-catalog federation query execution, and analytical visualization can be executed interactively via JupyterLab using the bundled notebook [`lakehouse_quickstart.ipynb`](file:///c:/Users/Hp/Documents/GitHub/UnityCatalog/lakehouse_quickstart.ipynb).
 
@@ -606,7 +606,7 @@ plt.show()
 
 ---
 
-### Phase B: Verify Trino Catalogs
+### Phase C: Verify Trino Catalogs
 
 List active catalogs recognized by the Trino coordinator:
 
@@ -627,7 +627,7 @@ Expected output:
 
 ---
 
-### Phase C: Basic Cross-Catalog Federation Query
+### Phase D: Basic Cross-Catalog Federation Query
 
 Execute a federated query joining transactional data (`postgresql.public.users`) with analytical event data resolved by Unity Catalog on MinIO object storage (`unity.analytics_schema.clickstream`):
 
@@ -666,7 +666,7 @@ LIMIT 10;
 
 ---
 
-### Phase D: Governance Configuration (RBAC, RLS & Column Masking)
+### Phase E: Governance Configuration (RBAC, RLS & Column Masking)
 
 The security rules mounted inside Trino at `/etc/trino/rules.json` enforce the following policies:
 
@@ -683,7 +683,7 @@ The security rules mounted inside Trino at `/etc/trino/rules.json` enforce the f
 
 ---
 
-### Phase E: Live Security Verification (Admin vs Analyst)
+### Phase F: Live Security Verification (Admin vs Analyst)
 
 Execute the following verification queries to observe how Trino enforces security policies:
 
