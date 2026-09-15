@@ -352,7 +352,7 @@ bonus_schema = Schema(
     NestedField(field_id=1, name="emp_id", field_type=StringType(), required=True),
     NestedField(field_id=2, name="annual_bonus", field_type=DoubleType(), required=True),
     NestedField(field_id=3, name="performance_score", field_type=DoubleType(), required=True),
-    NestedField(field_id=4, name="fiscal_year", IntegerType(), required=True),
+    NestedField(field_id=4, name="fiscal_year", field_type=IntegerType(), required=True),
 )
 
 try:
