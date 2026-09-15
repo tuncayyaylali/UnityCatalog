@@ -596,13 +596,8 @@ plt.show()
 ```
 
 **Cell 7 Output:**
-```text
-[Rendered Matplotlib Bar Chart]
-- Ahmet Yilmaz: 4 clicks
-- Can Ozturk: 2 clicks
-- Ayse Demir: 2 clicks
-- Mehmet Kaya: 1 click
-```
+
+![alt text](image.png)
 
 ---
 
@@ -735,6 +730,9 @@ ORDER BY emp_id;
 ```text
 "EMP001","Ca****","Engineering","0.00"
 ```
+
+![alt text](image-2.png)
+
 - **RLS Verification:** Only the `Engineering` record is returned (the other 4 departments are completely filtered out).
 - **Name Masking Verification:** `Caner Yilmaz` is masked as `Ca****`.
 - **Salary Masking Verification:** `95000.00` is replaced with `0.00`.
@@ -759,6 +757,8 @@ LIMIT 3;
 "EMP002","4.5","2026"
 "EMP003","4.7","2026"
 ```
+
+![alt text](image-1.png)
 
 ---
 
